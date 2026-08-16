@@ -1,22 +1,43 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-
+	"strings"
+	"github.com/anjuajay2468-glitch/cloudscale/internal/replication"
 	"github.com/anjuajay2468-glitch/cloudscale/internal/storage"
 )
 
 func main() {
-	store, err := storage.NewStore("./data")
+	nodeID := flag.String("id", "node1", "unique node ID")
+	port := flag.String("port", "8080", "HTTP port")
+	dataDir := flag.String("data", "./data", "storage directory")
+
+	peers := flag.String(
+		"peers",
+		"",
+		"comma-separated peer URLs",
+	)
+
+	flag.Parse()
+
+	var peerList []string
+	if *peers != "" {
+		peerList = strings.Split(*peers, ",")
+	}
+	replicator := replication.NewReplicator(peerList)
+
+	store, err := storage.NewStore(*dataDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "CloudScale node is healthy")
+		fmt.Fprintf(w, "CloudScale node %s is healthy\n", *nodeID)
 	})
 
 	http.HandleFunc("/objects/", func(w http.ResponseWriter, r *http.Request) {
@@ -30,10 +51,8 @@ func main() {
 		switch r.Method {
 
 		case http.MethodPut:
-			data := make([]byte, r.ContentLength)
-
-			_, err := r.Body.Read(data)
-			if err != nil && len(data) == 0 {
+			data, err := io.ReadAll(r.Body)
+			if err != nil {
 				http.Error(w, "failed to read request body", http.StatusBadRequest)
 				return
 			}
@@ -44,11 +63,21 @@ func main() {
 				return
 			}
 
+			if err := replicator.ReplicatePut(name, data); err != nil {
+				http.Error(
+					w,
+					fmt.Sprintf("replication failed: %v", err),
+					http.StatusInternalServerError,
+				)
+				return
+			}
+
 			w.WriteHeader(http.StatusCreated)
-			fmt.Fprintln(w, "Object stored successfully")
+			fmt.Fprintf(w, "Object stored on node %s\n", *nodeID)
 
 		case http.MethodGet:
 			data, err := store.Get(name)
+
 			if err == storage.ErrNotFound {
 				http.Error(w, "object not found", http.StatusNotFound)
 				return
@@ -64,6 +93,7 @@ func main() {
 
 		case http.MethodDelete:
 			err := store.Delete(name)
+
 			if err == storage.ErrNotFound {
 				http.Error(w, "object not found", http.StatusNotFound)
 				return
@@ -81,7 +111,18 @@ func main() {
 		}
 	})
 
-	fmt.Println("CloudScale storage node running on :8080")
+	address := ":" + *port
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Printf(
+		"CloudScale node %s running on %s\n",
+		*nodeID,
+		address,
+	)
+
+	fmt.Printf(
+		"Storage directory: %s\n",
+		*dataDir,
+	)
+
+	log.Fatal(http.ListenAndServe(address, nil))
 }
