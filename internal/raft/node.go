@@ -25,6 +25,8 @@ type Node struct {
 	VotedFor string
 
 	LastHeartbeat time.Time
+
+	ClusterSize int
 }
 
 func NewNode(id string) *Node {
@@ -34,6 +36,7 @@ func NewNode(id string) *Node {
 		CurrentTerm:    0,
 		VotedFor:       "",
 		LastHeartbeat:  time.Now(),
+		ClusterSize:    3,
 	}
 }
 func (s State) String() string {
@@ -47,4 +50,37 @@ func (s State) String() string {
 	default:
 		return "Unknown"
 	}
+}
+func (n *Node) RequestVote(args RequestVoteArgs) RequestVoteReply {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	reply := RequestVoteReply{
+		Term:        n.CurrentTerm,
+		VoteGranted: false,
+	}
+
+	// Candidate is from an older term.
+	if args.Term < n.CurrentTerm {
+		return reply
+	}
+
+	// Candidate has a newer term.
+	if args.Term > n.CurrentTerm {
+		n.CurrentTerm = args.Term
+		n.State = Follower
+		n.VotedFor = ""
+	}
+
+	reply.Term = n.CurrentTerm
+
+	// Grant vote if we haven't voted for another candidate
+	// in this term.
+	if n.VotedFor == "" || n.VotedFor == args.CandidateID {
+		n.VotedFor = args.CandidateID
+		reply.VoteGranted = true
+		n.LastHeartbeat = time.Now()
+	}
+
+	return reply
 }
