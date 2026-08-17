@@ -18,7 +18,7 @@ func (n *Node) StartElection(peers []string) bool {
 	n.LastHeartbeat = time.Now()
 
 	term := n.CurrentTerm
-	votes := 1 // vote for ourselves
+	votes := 1
 
 	n.mu.Unlock()
 
@@ -37,7 +37,6 @@ func (n *Node) StartElection(peers []string) bool {
 
 		n.mu.Lock()
 
-		// Another node has a newer term.
 		if reply.Term > n.CurrentTerm {
 			n.CurrentTerm = reply.Term
 			n.State = Follower
@@ -54,22 +53,31 @@ func (n *Node) StartElection(peers []string) bool {
 		n.mu.Unlock()
 	}
 
+	// Check whether we won the election.
 	n.mu.Lock()
-	defer n.mu.Unlock()
 
-	// We may have stepped down while the election was happening.
 	if n.State != Candidate || n.CurrentTerm != term {
+		n.mu.Unlock()
 		return false
 	}
 
-	// Majority of the total cluster.
 	majority := n.ClusterSize/2 + 1
 
-	if votes >= majority {
-		n.State = Leader
-		n.LastHeartbeat = time.Now()
-		return true
+	if votes < majority {
+		n.mu.Unlock()
+		return false
 	}
 
-	return false
+	// We are now leader.
+	n.State = Leader
+	n.LastHeartbeat = time.Now()
+
+	n.mu.Unlock()
+
+	// IMPORTANT:
+	// InitializeLeaderReplication() acquires n.mu itself,
+	// so it must be called after releasing the lock.
+	n.InitializeLeaderReplication(peers)
+
+	return true
 }

@@ -30,18 +30,35 @@ type Node struct {
 	ClusterSize int
 
 	ElectionTimeout time.Duration
+
+	Log *Log
+
+	CommitIndex int
+
+	LastApplied int
+
+	NextIndex  map[string]int
+	
+	MatchIndex map[string]int
 }
 
 func NewNode(id string) *Node {
 	return &Node{
-		ID:              id,
-		State:           Follower,
-		CurrentTerm:     0,
-		VotedFor:        "",
-		LastHeartbeat:   time.Now(),
-		ClusterSize:     3,
-		ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
-	}
+	ID:              id,
+	State:            Follower,
+	CurrentTerm:     0,
+	VotedFor:        "",
+	LastHeartbeat:   time.Now(),
+	ClusterSize:     3,
+	ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
+
+	Log:         NewLog(),
+	CommitIndex: 0,
+	LastApplied: 0,
+
+	NextIndex:  make(map[string]int),
+	MatchIndex: make(map[string]int),
+}
 }
 func (s State) String() string {
 	switch s {

@@ -152,3 +152,359 @@ func TestLeaderElectionTimerDoesNotExpire(t *testing.T) {
 		t.Fatal("leader election timer should not expire")
 	}
 }
+func TestAppendEntriesReplicatesLog(t *testing.T) {
+	node := NewNode("node2")
+
+	node.CurrentTerm = 1
+
+	entry := LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello CloudScale"),
+	}
+
+	reply := node.HandleAppendEntries(AppendEntriesArgs{
+		Term:         1,
+		LeaderID:     "node1",
+		PrevLogIndex: 0,
+		PrevLogTerm:  0,
+		Entries:      []LogEntry{entry},
+		LeaderCommit: 0,
+	})
+
+	if !reply.Success {
+		t.Fatal("expected append entries to succeed")
+	}
+
+	if len(node.Log.Entries) != 1 {
+		t.Fatalf(
+			"expected 1 log entry, got %d",
+			len(node.Log.Entries),
+		)
+	}
+
+	if node.Log.Entries[0].Key != "hello.txt" {
+		t.Fatalf(
+			"expected hello.txt, got %s",
+			node.Log.Entries[0].Key,
+		)
+	}
+}
+func TestAppendEntriesResolvesConflict(t *testing.T) {
+	node := NewNode("node2")
+
+	node.CurrentTerm = 2
+
+	// Existing follower log.
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "a.txt",
+		Data:    []byte("A"),
+	})
+
+	node.Log.Append(LogEntry{
+		Index:   2,
+		Term:    1,
+		Command: "PUT",
+		Key:     "b.txt",
+		Data:    []byte("B"),
+	})
+
+	// Conflicting entry.
+	node.Log.Append(LogEntry{
+		Index:   3,
+		Term:    9,
+		Command: "PUT",
+		Key:     "wrong.txt",
+		Data:    []byte("WRONG"),
+	})
+
+	// Leader says entry 3 should actually be term 2.
+	reply := node.HandleAppendEntries(AppendEntriesArgs{
+		Term:         2,
+		LeaderID:     "node1",
+		PrevLogIndex: 2,
+		PrevLogTerm:  1,
+		Entries: []LogEntry{
+			{
+				Index:   3,
+				Term:    2,
+				Command: "PUT",
+				Key:     "correct.txt",
+				Data:    []byte("CORRECT"),
+			},
+		},
+		LeaderCommit: 0,
+	})
+
+	if !reply.Success {
+		t.Fatal("expected append entries to succeed")
+	}
+
+	if len(node.Log.Entries) != 3 {
+		t.Fatalf(
+			"expected 3 log entries, got %d",
+			len(node.Log.Entries),
+		)
+	}
+
+	if node.Log.Entries[2].Term != 2 {
+		t.Fatalf(
+			"expected term 2, got %d",
+			node.Log.Entries[2].Term,
+		)
+	}
+
+	if node.Log.Entries[2].Key != "correct.txt" {
+		t.Fatalf(
+			"expected correct.txt, got %s",
+			node.Log.Entries[2].Key,
+		)
+	}
+}
+func TestInitializeLeaderReplication(t *testing.T) {
+	node := NewNode("node1")
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "a.txt",
+		Data:    []byte("A"),
+	})
+
+	node.Log.Append(LogEntry{
+		Index:   2,
+		Term:    1,
+		Command: "PUT",
+		Key:     "b.txt",
+		Data:    []byte("B"),
+	})
+
+	peers := []string{
+		"http://localhost:8002",
+		"http://localhost:8003",
+	}
+
+	node.InitializeLeaderReplication(peers)
+
+	if node.NextIndex[peers[0]] != 3 {
+		t.Fatalf(
+			"expected nextIndex 3, got %d",
+			node.NextIndex[peers[0]],
+		)
+	}
+
+	if node.NextIndex[peers[1]] != 3 {
+		t.Fatalf(
+			"expected nextIndex 3, got %d",
+			node.NextIndex[peers[1]],
+		)
+	}
+
+	if node.MatchIndex[peers[0]] != 0 {
+		t.Fatalf(
+			"expected matchIndex 0, got %d",
+			node.MatchIndex[peers[0]],
+		)
+	}
+}
+func TestAdvanceCommitIndex(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "a.txt",
+		Data:    []byte("A"),
+	})
+
+	node.Log.Append(LogEntry{
+		Index:   2,
+		Term:    1,
+		Command: "PUT",
+		Key:     "b.txt",
+		Data:    []byte("B"),
+	})
+
+	node.MatchIndex["node2"] = 2
+	node.MatchIndex["node3"] = 1
+
+	node.AdvanceCommitIndex()
+
+	if node.CommitIndex != 2 {
+		t.Fatalf(
+			"expected commit index 2, got %d",
+			node.CommitIndex,
+		)
+	}
+}
+func TestApplyCommitted(t *testing.T) {
+	node := NewNode("node1")
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello CloudScale"),
+	})
+
+	node.Log.Append(LogEntry{
+		Index:   2,
+		Term:    1,
+		Command: "DELETE",
+		Key:     "old.txt",
+	})
+
+	node.CommitIndex = 2
+
+	var applied []LogEntry
+
+	err := node.ApplyCommitted(func(entry LogEntry) error {
+		applied = append(applied, entry)
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(applied) != 2 {
+		t.Fatalf(
+			"expected 2 applied entries, got %d",
+			len(applied),
+		)
+	}
+
+	if applied[0].Key != "hello.txt" {
+		t.Fatalf(
+			"expected hello.txt, got %s",
+			applied[0].Key,
+		)
+	}
+
+	if applied[1].Command != "DELETE" {
+		t.Fatalf(
+			"expected DELETE, got %s",
+			applied[1].Command,
+		)
+	}
+
+	if node.LastApplied != 2 {
+		t.Fatalf(
+			"expected LastApplied 2, got %d",
+			node.LastApplied,
+		)
+	}
+}
+func TestProposeCreatesLogEntry(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+	node.CurrentTerm = 7
+
+	entry, err := node.Propose(
+		"PUT",
+		"hello.txt",
+		[]byte("Hello CloudScale"),
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if entry.Index != 1 {
+		t.Fatalf("expected index 1, got %d", entry.Index)
+	}
+
+	if entry.Term != 7 {
+		t.Fatalf("expected term 7, got %d", entry.Term)
+	}
+
+	if entry.Command != "PUT" {
+		t.Fatalf("expected PUT, got %s", entry.Command)
+	}
+
+	if entry.Key != "hello.txt" {
+		t.Fatalf("expected hello.txt, got %s", entry.Key)
+	}
+
+	if string(entry.Data) != "Hello CloudScale" {
+		t.Fatalf(
+			"expected Hello CloudScale, got %s",
+			string(entry.Data),
+		)
+	}
+
+	if node.Log.LastIndex() != 1 {
+		t.Fatalf(
+			"expected log index 1, got %d",
+			node.Log.LastIndex(),
+		)
+	}
+}
+func TestFollowerCannotPropose(t *testing.T) {
+	node := NewNode("node2")
+
+	node.State = Follower
+
+	_, err := node.Propose(
+		"PUT",
+		"hello.txt",
+		[]byte("Hello"),
+	)
+
+	if err == nil {
+		t.Fatal("expected follower proposal to fail")
+	}
+
+	if node.Log.LastIndex() != 0 {
+		t.Fatalf(
+			"expected empty log, got index %d",
+			node.Log.LastIndex(),
+		)
+	}
+}
+func TestLeaderReplicationTracking(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+	node.CurrentTerm = 1
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello"),
+	})
+
+	peers := []string{
+		"http://localhost:8002",
+		"http://localhost:8003",
+	}
+
+	node.InitializeLeaderReplication(peers)
+
+	if node.NextIndex[peers[0]] != 2 {
+		t.Fatalf(
+			"expected nextIndex 2, got %d",
+			node.NextIndex[peers[0]],
+		)
+	}
+
+	if node.MatchIndex[peers[0]] != 0 {
+		t.Fatalf(
+			"expected matchIndex 0, got %d",
+			node.MatchIndex[peers[0]],
+		)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 func SendRequestVote(
@@ -19,7 +20,11 @@ func SendRequestVote(
 
 	url := fmt.Sprintf("%s/raft/request-vote", peer)
 
-	resp, err := http.Post(
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	resp, err := client.Post(
 		url,
 		"application/json",
 		bytes.NewReader(data),
