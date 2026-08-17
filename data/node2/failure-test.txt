@@ -1,0 +1,1 @@
+CloudScale survived a node failure

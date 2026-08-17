@@ -40,6 +40,34 @@ func main() {
 		fmt.Fprintf(w, "CloudScale node %s is healthy\n", *nodeID)
 	})
 
+	http.HandleFunc("/internal/replicate/", func(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.URL.Path[len("/internal/replicate/"):]
+
+	if name == "" {
+		http.Error(w, "object name is required", http.StatusBadRequest)
+		return
+	}
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := store.Put(name, data); err != nil {
+		http.Error(w, "failed to store replica", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, "Replica stored on node %s\n", *nodeID)
+})
+
 	http.HandleFunc("/objects/", func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Path[len("/objects/"):]
 
