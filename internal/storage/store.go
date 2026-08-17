@@ -53,3 +53,19 @@ func (s *Store) Delete(name string) error {
 
 	return err
 }
+func (s *Store) List() ([]string, error) {
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var objects []string
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			objects = append(objects, entry.Name())
+		}
+	}
+
+	return objects, nil
+}
