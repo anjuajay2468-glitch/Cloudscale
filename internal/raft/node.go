@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -27,16 +28,19 @@ type Node struct {
 	LastHeartbeat time.Time
 
 	ClusterSize int
+
+	ElectionTimeout time.Duration
 }
 
 func NewNode(id string) *Node {
 	return &Node{
-		ID:             id,
-		State:          Follower,
-		CurrentTerm:    0,
-		VotedFor:       "",
-		LastHeartbeat:  time.Now(),
-		ClusterSize:    3,
+		ID:              id,
+		State:           Follower,
+		CurrentTerm:     0,
+		VotedFor:        "",
+		LastHeartbeat:   time.Now(),
+		ClusterSize:     3,
+		ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
 	}
 }
 func (s State) String() string {

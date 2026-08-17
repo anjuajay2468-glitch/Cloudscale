@@ -11,6 +11,7 @@ import (
 
 	"github.com/anjuajay2468-glitch/cloudscale/internal/replication"
 	"github.com/anjuajay2468-glitch/cloudscale/internal/storage"
+	"github.com/anjuajay2468-glitch/cloudscale/internal/raft"
 )
 
 func main() {
@@ -33,6 +34,18 @@ func main() {
 	}
 
 	replicator := replication.NewReplicator(peerList)
+
+		// Initialize Raft.
+	raftNode := raft.NewNode(*nodeID)
+	raftServer := raft.NewServer(raftNode)
+
+	// Register Raft HTTP endpoints.
+	raftServer.RegisterRoutes(http.DefaultServeMux)
+
+	// Start automatic leader election and heartbeats.
+	stopRaft := make(chan struct{})
+
+	go raftNode.RunElectionTimer(peerList, stopRaft)
 
 	// Recover objects from peers when this node starts.
 	if len(peerList) > 0 {

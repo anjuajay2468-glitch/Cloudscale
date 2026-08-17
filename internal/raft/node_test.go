@@ -1,6 +1,9 @@
 package raft
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestNewNode(t *testing.T) {
 	node := NewNode("node1")
@@ -81,5 +84,71 @@ func TestElectionMajority(t *testing.T) {
 
 	if node.CurrentTerm != 1 {
 		t.Fatalf("expected term 1, got %d", node.CurrentTerm)
+	}
+}
+func TestAppendEntriesHeartbeat(t *testing.T) {
+	node := NewNode("node2")
+
+	node.CurrentTerm = 1
+	node.State = Candidate
+
+	reply := node.HandleAppendEntries(AppendEntriesArgs{
+		Term:     1,
+		LeaderID: "node1",
+	})
+
+	if !reply.Success {
+		t.Fatal("expected heartbeat to be accepted")
+	}
+
+	if node.State != Follower {
+		t.Fatalf("expected follower, got %s", node.State)
+	}
+
+	if node.CurrentTerm != 1 {
+		t.Fatalf("expected term 1, got %d", node.CurrentTerm)
+	}
+}
+func TestHeartbeatMakesCandidateFollower(t *testing.T) {
+	node := NewNode("node2")
+
+	node.CurrentTerm = 1
+	node.State = Candidate
+
+	reply := node.HandleAppendEntries(AppendEntriesArgs{
+		Term:     1,
+		LeaderID: "node1",
+	})
+
+	if !reply.Success {
+		t.Fatal("expected heartbeat to succeed")
+	}
+
+	if node.State != Follower {
+		t.Fatalf(
+			"expected follower after heartbeat, got %s",
+			node.State,
+		)
+	}
+}
+func TestElectionTimerExpires(t *testing.T) {
+	node := NewNode("node1")
+
+	node.ElectionTimeout = 10 * time.Millisecond
+	node.LastHeartbeat = time.Now().Add(-20 * time.Millisecond)
+
+	if !node.ElectionTimerExpired() {
+		t.Fatal("expected election timer to expire")
+	}
+}
+func TestLeaderElectionTimerDoesNotExpire(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+	node.ElectionTimeout = 10 * time.Millisecond
+	node.LastHeartbeat = time.Now().Add(-20 * time.Millisecond)
+
+	if node.ElectionTimerExpired() {
+		t.Fatal("leader election timer should not expire")
 	}
 }
