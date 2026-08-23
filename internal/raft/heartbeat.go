@@ -34,6 +34,10 @@ func (n *Node) HandleAppendEntries(args AppendEntriesArgs) AppendEntriesReply {
 	if args.Term > n.CurrentTerm {
 		n.CurrentTerm = args.Term
 		n.VotedFor = ""
+
+		if err := n.saveStateLocked(); err != nil {
+			return reply
+		}
 	}
 
 	n.State = Follower
@@ -68,13 +72,28 @@ func (n *Node) HandleAppendEntries(args AppendEntriesArgs) AppendEntriesReply {
 			n.Log.Append(entry)
 		}
 	}
+	if len(args.Entries) > 0 && n.LogPath != "" {
+		if err := n.Log.Save(n.LogPath); err != nil {
+			reply.Term = n.CurrentTerm
+			return reply
+		}
+	}
 
 	// Update commit index.
+	// Update and persist commit index.
 	if args.LeaderCommit > n.CommitIndex {
-		n.CommitIndex = args.LeaderCommit
+		newCommitIndex := args.LeaderCommit
 
-		if n.CommitIndex > len(n.Log.Entries) {
-			n.CommitIndex = len(n.Log.Entries)
+		if newCommitIndex > len(n.Log.Entries) {
+			newCommitIndex = len(n.Log.Entries)
+		}
+
+		n.CommitIndex = newCommitIndex
+
+		if err := n.saveStateLocked(); err != nil {
+			reply.Term = n.CurrentTerm
+			reply.Success = false
+			return reply
 		}
 	}
 
@@ -151,13 +170,15 @@ func (n *Node) SendHeartbeats(peers []string) {
 		}
 
 		if reply.Success {
-			// We successfully replicated everything we sent.
-			if len(entries) > 0 {
-				lastReplicated := entries[len(entries)-1].Index
+			// The follower successfully matched everything through
+			// the previous log index plus all entries we sent.
+			lastReplicated := prevLogIndex + len(entries)
 
+			if lastReplicated > n.MatchIndex[peer] {
 				n.MatchIndex[peer] = lastReplicated
-				n.NextIndex[peer] = lastReplicated + 1
 			}
+
+			n.NextIndex[peer] = lastReplicated + 1
 		} else {
 			// Follower rejected the entries.
 			// Move backwards and retry on the next heartbeat.
@@ -172,6 +193,69 @@ func (n *Node) SendHeartbeats(peers []string) {
 	// Check whether the newly replicated entries
 	// have reached a majority.
 	n.AdvanceCommitIndex()
+}
+func (n *Node) ConfirmLeadership(peers []string) bool {
+	n.mu.Lock()
+
+	if n.State != Leader {
+		n.mu.Unlock()
+		return false
+	}
+
+	term := n.CurrentTerm
+
+	// The leader counts as one successful acknowledgement.
+	acks := 1
+
+	// Capture the leader's current log position.
+	lastIndex := n.Log.LastIndex()
+	lastTerm := n.Log.LastTerm()
+
+	n.mu.Unlock()
+
+	for _, peer := range peers {
+		reply, err := SendAppendEntries(
+			peer,
+			AppendEntriesArgs{
+				Term:         term,
+				LeaderID:     n.ID,
+				PrevLogIndex: lastIndex,
+				PrevLogTerm:  lastTerm,
+				Entries:      nil,
+				LeaderCommit: n.CommitIndex,
+			},
+		)
+
+		if err != nil {
+			continue
+		}
+
+		n.mu.Lock()
+
+		// We discovered a newer term.
+		if reply.Term > n.CurrentTerm {
+			n.CurrentTerm = reply.Term
+			n.State = Follower
+			n.VotedFor = ""
+			n.mu.Unlock()
+
+			return false
+		}
+
+		// Leadership must still be valid in the same term.
+		if n.State != Leader || n.CurrentTerm != term {
+			n.mu.Unlock()
+			return false
+		}
+
+		if reply.Success {
+			acks++
+		}
+
+		n.mu.Unlock()
+	}
+
+	return acks > n.ClusterSize/2
 }
 func (n *Node) HeartbeatLoop(
 	peers []string,

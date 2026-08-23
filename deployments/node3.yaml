@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node3
+  namespace: cloudscale
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node3
+  template:
+    metadata:
+      labels:
+        app: node3
+    spec:
+      containers:
+        - name: node3
+          image: 315584099639.dkr.ecr.us-east-1.amazonaws.com/cloudscale-node:latest
+          imagePullPolicy: Always
+          command:
+            - /app/cloudscale-node
+            - --id
+            - node3
+            - --port
+            - "8003"
+            - --data
+            - /data
+            - --peers
+            - http://node1:8001,http://node2:8002
+          env:
+            - name: CLOUDSCALE_INTERNAL_TOKEN
+              value: "cloudscale-internal-2026"
+          ports:
+            - containerPort: 8003
+          volumeMounts:
+            - name: node3-data
+              mountPath: /data
+      volumes:
+        - name: node3-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node3
+  namespace: cloudscale
+spec:
+  selector:
+    app: node3
+  ports:
+    - port: 8003
+      targetPort: 8003

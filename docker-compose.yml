@@ -1,0 +1,109 @@
+services:
+
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-node1
+    command:
+      - /app/cloudscale-node
+      - --id
+      - node1
+      - --port
+      - "8001"
+      - --data
+      - /data
+      - --peers
+      - http://node2:8002,http://node3:8003
+    environment:
+      CLOUDSCALE_INTERNAL_TOKEN: ${CLOUDSCALE_INTERNAL_TOKEN}
+    ports:
+      - "8001:8001"
+    volumes:
+      - node1-data:/data
+    networks:
+      - cloudscale
+    restart: unless-stopped
+
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-node2
+    command:
+      - /app/cloudscale-node
+      - --id
+      - node2
+      - --port
+      - "8002"
+      - --data
+      - /data
+      - --peers
+      - http://node1:8001,http://node3:8003
+    environment:
+      CLOUDSCALE_INTERNAL_TOKEN: ${CLOUDSCALE_INTERNAL_TOKEN}
+    ports:
+      - "8002:8002"
+    volumes:
+      - node2-data:/data
+    networks:
+      - cloudscale
+    restart: unless-stopped
+
+  node3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-node3
+    command:
+      - /app/cloudscale-node
+      - --id
+      - node3
+      - --port
+      - "8003"
+      - --data
+      - /data
+      - --peers
+      - http://node1:8001,http://node2:8002
+    environment:
+      CLOUDSCALE_INTERNAL_TOKEN: ${CLOUDSCALE_INTERNAL_TOKEN}
+    ports:
+      - "8003:8003"
+    volumes:
+      - node3-data:/data
+    networks:
+      - cloudscale
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-gateway
+    command:
+      - /app/cloudscale-gateway
+      - --port
+      - "9000"
+      - --nodes
+      - http://node1:8001,http://node2:8002,http://node3:8003
+    environment:
+      CLOUDSCALE_ADMIN_KEY: ${CLOUDSCALE_ADMIN_KEY}
+      CLOUDSCALE_READER_KEY: ${CLOUDSCALE_READER_KEY}
+    ports:
+      - "9000:9000"
+    depends_on:
+      - node1
+      - node2
+      - node3
+    networks:
+      - cloudscale
+    restart: unless-stopped
+
+networks:
+  cloudscale:
+    driver: bridge
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

@@ -27,13 +27,21 @@ func (n *Node) HasMajority(index int) bool {
 }
 func (n *Node) AdvanceCommitIndex() {
 	n.mu.Lock()
-	defer n.mu.Unlock()
+
+	changed := false
 
 	for index := n.CommitIndex + 1; index <= n.Log.LastIndex(); index++ {
 		if n.HasMajorityUnsafe(index) {
 			n.CommitIndex = index
+			changed = true
 		}
 	}
+
+	if changed {
+		_ = n.saveStateLocked()
+	}
+
+	n.mu.Unlock()
 }
 func (n *Node) HasMajorityUnsafe(index int) bool {
 	count := 1
@@ -45,4 +53,12 @@ func (n *Node) HasMajorityUnsafe(index int) bool {
 	}
 
 	return count > n.ClusterSize/2
+}
+func (n *Node) ReplicateAndCommit(peers []string, index int) bool {
+	n.SendHeartbeats(peers)
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	return n.CommitIndex >= index
 }

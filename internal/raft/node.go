@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -33,33 +34,76 @@ type Node struct {
 
 	Log *Log
 
+	LogPath   string
+	StatePath string
+
 	CommitIndex int
 
 	LastApplied int
 
 	NextIndex  map[string]int
-	
 	MatchIndex map[string]int
 }
 
 func NewNode(id string) *Node {
 	return &Node{
-	ID:              id,
-	State:            Follower,
-	CurrentTerm:     0,
-	VotedFor:        "",
-	LastHeartbeat:   time.Now(),
-	ClusterSize:     3,
-	ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
+		ID:              id,
+		State:           Follower,
+		CurrentTerm:     0,
+		VotedFor:        "",
+		LastHeartbeat:   time.Now(),
+		ClusterSize:     3,
+		ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
 
-	Log:         NewLog(),
-	CommitIndex: 0,
-	LastApplied: 0,
+		Log:         NewLog(),
+		CommitIndex: 0,
+		LastApplied: 0,
 
-	NextIndex:  make(map[string]int),
-	MatchIndex: make(map[string]int),
+		NextIndex:  make(map[string]int),
+		MatchIndex: make(map[string]int),
+	}
 }
+
+func NewNodeWithLogPath(
+	id string,
+	logPath string,
+	statePath string,
+) (*Node, error) {
+	node := NewNode(id)
+
+	node.LogPath = logPath
+	node.StatePath = statePath
+
+	if err := node.Log.Load(logPath); err != nil {
+		return nil, err
+	}
+
+	if err := node.LoadState(statePath); err != nil {
+		return nil, err
+	}
+
+	// Persist the recovered, internally consistent state.
+	node.mu.Lock()
+	if err := node.saveStateLocked(); err != nil {
+		node.mu.Unlock()
+		return nil, err
+	}
+	node.mu.Unlock()
+
+	return node, nil
 }
+
+func (n *Node) PersistLog() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if n.LogPath == "" {
+		return nil
+	}
+
+	return n.Log.Save(n.LogPath)
+}
+
 func (s State) String() string {
 	switch s {
 	case Follower:
@@ -72,6 +116,7 @@ func (s State) String() string {
 		return "Unknown"
 	}
 }
+
 func (n *Node) RequestVote(args RequestVoteArgs) RequestVoteReply {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -81,12 +126,12 @@ func (n *Node) RequestVote(args RequestVoteArgs) RequestVoteReply {
 		VoteGranted: false,
 	}
 
-	// Candidate is from an older term.
+	// Reject candidates from older terms.
 	if args.Term < n.CurrentTerm {
 		return reply
 	}
 
-	// Candidate has a newer term.
+	// A newer term always supersedes our current state.
 	if args.Term > n.CurrentTerm {
 		n.CurrentTerm = args.Term
 		n.State = Follower
@@ -95,13 +140,74 @@ func (n *Node) RequestVote(args RequestVoteArgs) RequestVoteReply {
 
 	reply.Term = n.CurrentTerm
 
-	// Grant vote if we haven't voted for another candidate
-	// in this term.
+	// Only vote for a candidate whose log is at least as
+	// up-to-date as our own log.
+	//
+	// Raft compares the last log term first. If the terms are
+	// equal, the candidate with the longer log is more up-to-date.
+	candidateUpToDate :=
+		args.LastLogTerm > n.Log.LastTerm() ||
+			(args.LastLogTerm == n.Log.LastTerm() &&
+				args.LastLogIndex >= n.Log.LastIndex())
+
+	if !candidateUpToDate {
+		return reply
+	}
+	// We may vote once per term.
 	if n.VotedFor == "" || n.VotedFor == args.CandidateID {
 		n.VotedFor = args.CandidateID
-		reply.VoteGranted = true
+		n.State = Follower
+
+		// IMPORTANT:
+		// Granting a vote means this election is legitimate.
+		// Reset our election timer so we don't immediately
+		// start our own competing election.
 		n.LastHeartbeat = time.Now()
+
+		// Randomize the next election timeout.
+		n.ElectionTimeout = time.Duration(
+			250+rand.Intn(200),
+		) * time.Millisecond
+
+		reply.VoteGranted = true
+
+		if err := n.saveStateLocked(); err != nil {
+			reply.VoteGranted = false
+		}
 	}
 
 	return reply
+}
+
+func (n *Node) Status() State {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	return n.State
+}
+func (n *Node) RecoverLogFromPeer(peer string) error {
+	n.mu.Lock()
+	localLastIndex := n.Log.LastIndex()
+	localLastTerm := n.Log.LastTerm()
+	n.mu.Unlock()
+
+	args := AppendEntriesArgs{
+		Term:         n.CurrentTerm,
+		LeaderID:     "",
+		PrevLogIndex: localLastIndex,
+		PrevLogTerm:  localLastTerm,
+		Entries:      nil,
+		LeaderCommit: n.CommitIndex,
+	}
+
+	reply, err := SendAppendEntries(peer, args)
+	if err != nil {
+		return err
+	}
+
+	if !reply.Success {
+		return fmt.Errorf("peer rejected log recovery")
+	}
+
+	return nil
 }

@@ -24,5 +24,14 @@ func (n *Node) Propose(
 
 	n.Log.Append(entry)
 
+	if n.LogPath != "" {
+		if err := n.Log.Save(n.LogPath); err != nil {
+			return LogEntry{}, fmt.Errorf(
+				"failed to persist raft log: %w",
+				err,
+			)
+		}
+	}
+
 	return entry, nil
 }

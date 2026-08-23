@@ -1,0 +1,30 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/*/raft-log.json
+data/*/raft-state.json
+data/*/*.txt
+
+# Local test/runtime artifacts
+*.save
+
+# Docker / local development
+.docker/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Downloaded installers / archives
+*.tar.gz
+*.zip
+
+# Go build artifacts
+/bin/
+/out/
+*.exe

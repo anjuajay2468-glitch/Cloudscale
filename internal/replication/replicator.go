@@ -6,28 +6,61 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"time"
+
+	"github.com/anjuajay2468-glitch/cloudscale/internal/auth"
 )
 
+const internalTokenEnv = "CLOUDSCALE_INTERNAL_TOKEN"
+
 type Replicator struct {
-	Peers      []string
-	Client     *http.Client
+	Peers       []string
+	Client      *http.Client
 	WriteQuorum int
 }
 
 func NewReplicator(peers []string) *Replicator {
 	return &Replicator{
-		Peers:       peers,
-		Client:      &http.Client{},
+		Peers: peers,
+		Client: &http.Client{
+			Timeout: 2 * time.Second,
+		},
 		WriteQuorum: 2,
 	}
 }
 
-func (r *Replicator) ReplicatePut(name string, data []byte) error {
-	successes := 1 // local node already stored the object
+func (r *Replicator) addInternalAuth(req *http.Request) error {
+	token := os.Getenv(internalTokenEnv)
+
+	if token == "" {
+		return fmt.Errorf(
+			"%s environment variable is required",
+			internalTokenEnv,
+		)
+	}
+
+	req.Header.Set(
+		auth.InternalTokenHeader,
+		token,
+	)
+
+	return nil
+}
+
+func (r *Replicator) ReplicatePut(
+	name string,
+	data []byte,
+) error {
+	successes := 1
 	required := r.WriteQuorum
 
 	for _, peer := range r.Peers {
-		url := fmt.Sprintf("%s/internal/replicate/%s", peer, name)
+		url := fmt.Sprintf(
+			"%s/internal/replicate/%s",
+			peer,
+			name,
+		)
 
 		req, err := http.NewRequest(
 			http.MethodPut,
@@ -39,9 +72,22 @@ func (r *Replicator) ReplicatePut(name string, data []byte) error {
 			continue
 		}
 
+		if err := r.addInternalAuth(req); err != nil {
+			return err
+		}
+
+		req.Header.Set(
+			"Content-Type",
+			"application/octet-stream",
+		)
+
 		resp, err := r.Client.Do(req)
 		if err != nil {
-			fmt.Printf("Replication to %s failed: %v\n", peer, err)
+			fmt.Printf(
+				"Replication to %s failed: %v\n",
+				peer,
+				err,
+			)
 			continue
 		}
 
@@ -50,7 +96,12 @@ func (r *Replicator) ReplicatePut(name string, data []byte) error {
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			successes++
-			fmt.Printf("Replicated %s to %s\n", name, peer)
+
+			fmt.Printf(
+				"Replicated %s to %s\n",
+				name,
+				peer,
+			)
 		} else {
 			fmt.Printf(
 				"Replication to %s returned status %d\n",
@@ -70,10 +121,12 @@ func (r *Replicator) ReplicatePut(name string, data []byte) error {
 
 	return nil
 }
+
 type Store interface {
 	List() ([]string, error)
 	Put(name string, data []byte) error
 }
+
 func (r *Replicator) SyncFromPeers(store Store) error {
 	localObjects, err := store.List()
 	if err != nil {
@@ -93,6 +146,9 @@ func (r *Replicator) SyncFromPeers(store Store) error {
 		}
 
 		for _, object := range objects {
+                        if object == "raft-log.json" || object == "raft-state.json" {
+        continue
+    }
 			if localSet[object] {
 				continue
 			}
@@ -119,13 +175,32 @@ func (r *Replicator) SyncFromPeers(store Store) error {
 	return nil
 }
 
-func (r *Replicator) listPeerObjects(peer string) ([]string, error) {
-	url := fmt.Sprintf("%s/internal/objects", peer)
+func (r *Replicator) listPeerObjects(
+	peer string,
+) ([]string, error) {
+	url := fmt.Sprintf(
+		"%s/internal/objects",
+		peer,
+	)
 
-	resp, err := r.Client.Get(url)
+	req, err := http.NewRequest(
+		http.MethodGet,
+		url,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	if err := r.addInternalAuth(req); err != nil {
+		return nil, err
+	}
+
+	resp, err := r.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -137,20 +212,43 @@ func (r *Replicator) listPeerObjects(peer string) ([]string, error) {
 
 	var objects []string
 
-	if err := json.NewDecoder(resp.Body).Decode(&objects); err != nil {
+	if err := json.NewDecoder(
+		resp.Body,
+	).Decode(&objects); err != nil {
 		return nil, err
 	}
 
 	return objects, nil
 }
 
-func (r *Replicator) fetchObject(peer string, name string) ([]byte, error) {
-	url := fmt.Sprintf("%s/internal/replicate/%s", peer, name)
+func (r *Replicator) fetchObject(
+	peer string,
+	name string,
+) ([]byte, error) {
+	url := fmt.Sprintf(
+		"%s/internal/replicate/%s",
+		peer,
+		name,
+	)
 
-	resp, err := r.Client.Get(url)
+	req, err := http.NewRequest(
+		http.MethodGet,
+		url,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	if err := r.addInternalAuth(req); err != nil {
+		return nil, err
+	}
+
+	resp, err := r.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

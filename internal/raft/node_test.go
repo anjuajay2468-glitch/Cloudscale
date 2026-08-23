@@ -508,3 +508,108 @@ func TestLeaderReplicationTracking(t *testing.T) {
 		)
 	}
 }
+func TestMajorityCommitWithThreeNodes(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+	node.CurrentTerm = 1
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello CloudScale"),
+	})
+
+	node.MatchIndex["node2"] = 1
+	node.MatchIndex["node3"] = 0
+
+	node.AdvanceCommitIndex()
+
+	if node.CommitIndex != 1 {
+		t.Fatalf(
+			"expected commit index 1, got %d",
+			node.CommitIndex,
+		)
+	}
+}
+func TestReplicatedEntryCanBeCommitted(t *testing.T) {
+	node := NewNode("node1")
+
+	node.State = Leader
+	node.CurrentTerm = 1
+
+	node.Log.Append(LogEntry{
+		Index:   1,
+		Term:    1,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello CloudScale"),
+	})
+
+	node.MatchIndex["node2"] = 1
+	node.MatchIndex["node3"] = 0
+
+	node.AdvanceCommitIndex()
+
+	if node.CommitIndex != 1 {
+		t.Fatalf(
+			"expected commit index 1, got %d",
+			node.CommitIndex,
+		)
+	}
+}
+func TestLogPersistence(t *testing.T) {
+	path := t.TempDir() + "/raft-log.json"
+
+	log1 := NewLog()
+
+	log1.Append(LogEntry{
+		Index:   1,
+		Term:    5,
+		Command: "PUT",
+		Key:     "hello.txt",
+		Data:    []byte("Hello CloudScale"),
+	})
+
+	log1.Append(LogEntry{
+		Index:   2,
+		Term:    5,
+		Command: "DELETE",
+		Key:     "old.txt",
+	})
+
+	if err := log1.Save(path); err != nil {
+		t.Fatalf("failed to save log: %v", err)
+	}
+
+	log2 := NewLog()
+
+	if err := log2.Load(path); err != nil {
+		t.Fatalf("failed to load log: %v", err)
+	}
+
+	if len(log2.Entries) != 2 {
+		t.Fatalf(
+			"expected 2 entries, got %d",
+			len(log2.Entries),
+		)
+	}
+
+	if log2.Entries[0].Command != "PUT" {
+		t.Fatalf("expected PUT entry")
+	}
+
+	if log2.Entries[0].Key != "hello.txt" {
+		t.Fatalf("expected hello.txt")
+	}
+
+	if string(log2.Entries[0].Data) != "Hello CloudScale" {
+		t.Fatalf("unexpected entry data")
+	}
+
+	if log2.Entries[1].Command != "DELETE" {
+		t.Fatalf("expected DELETE entry")
+	}
+}
