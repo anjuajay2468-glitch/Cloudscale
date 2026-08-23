@@ -55,6 +55,7 @@ func main() {
 	if *peers != "" {
 		peerList = strings.Split(*peers, ",")
 	}
+	clusterSize := len(peerList) + 1
 
 	// ------------------------------------------------------------
 	// Replication
@@ -78,6 +79,7 @@ func main() {
 
 	raftNode, err := raft.NewNodeWithLogPath(
 		*nodeID,
+		clusterSize,
 		raftLogPath,
 		raftStatePath,
 	)

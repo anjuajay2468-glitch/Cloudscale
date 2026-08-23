@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewNode(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	if node.ID != "node1" {
 		t.Fatalf("expected node1, got %s", node.ID)
@@ -25,7 +25,7 @@ func TestNewNode(t *testing.T) {
 	}
 }
 func TestRequestVote(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	reply := node.RequestVote(RequestVoteArgs{
 		Term:        1,
@@ -52,7 +52,7 @@ func TestRequestVote(t *testing.T) {
 	}
 }
 func TestElectionWithoutPeersFails(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	elected := node.StartElection([]string{})
 
@@ -65,7 +65,7 @@ func TestElectionWithoutPeersFails(t *testing.T) {
 	}
 }
 func TestElectionMajority(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	// We don't have real peers here, so this should not
 	// become leader.
@@ -87,7 +87,7 @@ func TestElectionMajority(t *testing.T) {
 	}
 }
 func TestAppendEntriesHeartbeat(t *testing.T) {
-	node := NewNode("node2")
+	node := NewNode("node2", 3)
 
 	node.CurrentTerm = 1
 	node.State = Candidate
@@ -110,7 +110,7 @@ func TestAppendEntriesHeartbeat(t *testing.T) {
 	}
 }
 func TestHeartbeatMakesCandidateFollower(t *testing.T) {
-	node := NewNode("node2")
+	node := NewNode("node2", 3)
 
 	node.CurrentTerm = 1
 	node.State = Candidate
@@ -132,7 +132,7 @@ func TestHeartbeatMakesCandidateFollower(t *testing.T) {
 	}
 }
 func TestElectionTimerExpires(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.ElectionTimeout = 10 * time.Millisecond
 	node.LastHeartbeat = time.Now().Add(-20 * time.Millisecond)
@@ -142,7 +142,7 @@ func TestElectionTimerExpires(t *testing.T) {
 	}
 }
 func TestLeaderElectionTimerDoesNotExpire(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 	node.ElectionTimeout = 10 * time.Millisecond
@@ -153,7 +153,7 @@ func TestLeaderElectionTimerDoesNotExpire(t *testing.T) {
 	}
 }
 func TestAppendEntriesReplicatesLog(t *testing.T) {
-	node := NewNode("node2")
+	node := NewNode("node2", 3)
 
 	node.CurrentTerm = 1
 
@@ -193,7 +193,7 @@ func TestAppendEntriesReplicatesLog(t *testing.T) {
 	}
 }
 func TestAppendEntriesResolvesConflict(t *testing.T) {
-	node := NewNode("node2")
+	node := NewNode("node2", 3)
 
 	node.CurrentTerm = 2
 
@@ -267,7 +267,7 @@ func TestAppendEntriesResolvesConflict(t *testing.T) {
 	}
 }
 func TestInitializeLeaderReplication(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.Log.Append(LogEntry{
 		Index:   1,
@@ -314,7 +314,7 @@ func TestInitializeLeaderReplication(t *testing.T) {
 	}
 }
 func TestAdvanceCommitIndex(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 
@@ -347,7 +347,7 @@ func TestAdvanceCommitIndex(t *testing.T) {
 	}
 }
 func TestApplyCommitted(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.Log.Append(LogEntry{
 		Index:   1,
@@ -406,7 +406,7 @@ func TestApplyCommitted(t *testing.T) {
 	}
 }
 func TestProposeCreatesLogEntry(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 	node.CurrentTerm = 7
@@ -452,7 +452,7 @@ func TestProposeCreatesLogEntry(t *testing.T) {
 	}
 }
 func TestFollowerCannotPropose(t *testing.T) {
-	node := NewNode("node2")
+	node := NewNode("node2", 3)
 
 	node.State = Follower
 
@@ -474,7 +474,7 @@ func TestFollowerCannotPropose(t *testing.T) {
 	}
 }
 func TestLeaderReplicationTracking(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 	node.CurrentTerm = 1
@@ -509,7 +509,7 @@ func TestLeaderReplicationTracking(t *testing.T) {
 	}
 }
 func TestMajorityCommitWithThreeNodes(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 	node.CurrentTerm = 1
@@ -535,7 +535,7 @@ func TestMajorityCommitWithThreeNodes(t *testing.T) {
 	}
 }
 func TestReplicatedEntryCanBeCommitted(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 
 	node.State = Leader
 	node.CurrentTerm = 1

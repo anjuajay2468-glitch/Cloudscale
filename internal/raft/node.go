@@ -45,14 +45,14 @@ type Node struct {
 	MatchIndex map[string]int
 }
 
-func NewNode(id string) *Node {
+func NewNode(id string, clusterSize int) *Node {
 	return &Node{
 		ID:              id,
 		State:           Follower,
 		CurrentTerm:     0,
 		VotedFor:        "",
 		LastHeartbeat:   time.Now(),
-		ClusterSize:     3,
+		ClusterSize:     clusterSize,
 		ElectionTimeout: time.Duration(250+rand.Intn(200)) * time.Millisecond,
 
 		Log:         NewLog(),
@@ -66,10 +66,11 @@ func NewNode(id string) *Node {
 
 func NewNodeWithLogPath(
 	id string,
+	clusterSize int,
 	logPath string,
 	statePath string,
 ) (*Node, error) {
-	node := NewNode(id)
+	node := NewNode(id, clusterSize)
 
 	node.LogPath = logPath
 	node.StatePath = statePath

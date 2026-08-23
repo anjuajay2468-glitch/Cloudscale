@@ -8,7 +8,7 @@ import (
 )
 
 func TestRequestVoteHTTP(t *testing.T) {
-	node := NewNode("node1")
+	node := NewNode("node1", 3)
 	server := NewServer(node)
 
 	handler := http.HandlerFunc(server.HandleRequestVote)
@@ -43,9 +43,9 @@ func TestRequestVoteHTTP(t *testing.T) {
 	}
 }
 func TestThreeNodeElection(t *testing.T) {
-	node1 := NewNode("node1")
-	node2 := NewNode("node2")
-	node3 := NewNode("node3")
+	node1 := NewNode("node1", 3)
+	node2 := NewNode("node2", 3)
+	node3 := NewNode("node3", 3)
 
 	node1.ClusterSize = 3
 	node2.ClusterSize = 3
