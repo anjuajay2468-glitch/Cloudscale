@@ -1,0 +1,13 @@
+configuration,operation,requests,latency_ms,throughput_rps
+distributed,PUT,100,22.411,44.62
+distributed,PUT,500,30.402,32.89
+distributed,PUT,1000,32.405,30.86
+distributed,GET,100,16.793,59.55
+distributed,GET,500,17.884,55.92
+distributed,GET,1000,27.006,37.03
+single-node,PUT,100,22.969,43.54
+single-node,PUT,500,20.709,48.29
+single-node,PUT,1000,26.068,38.36
+single-node,GET,100,14.412,69.38
+single-node,GET,500,19.744,50.65
+single-node,GET,1000,16.026,62.40

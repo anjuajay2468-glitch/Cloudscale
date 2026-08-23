@@ -1,0 +1,5 @@
+configuration,component,cpu_percent,memory_mib
+distributed,node1,11.88,7.45
+distributed,node2,20.66,7.29
+distributed,node3,8.90,7.08
+single-node,node1,1.68,9.34
