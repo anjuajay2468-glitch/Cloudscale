@@ -1,0 +1,23 @@
+CloudScale Phase 16 - Replication Overhead Experiment
+
+Configuration:
+3-node Raft cluster
+Gateway + node1 + node2 + node3
+Sequential benchmark
+
+PUT:
+100 requests  -> 22.411 ms avg, 44.62 req/s
+500 requests  -> 30.402 ms avg, 32.89 req/s
+1000 requests -> 32.405 ms avg, 30.86 req/s
+
+GET:
+100 requests  -> 16.793 ms avg, 59.55 req/s
+500 requests  -> 17.884 ms avg, 55.92 req/s
+1000 requests -> 27.006 ms avg, 37.03 req/s
+
+Raft:
+Leader: node1
+Followers: node2, node3
+Commit index: 1603
+Last log index: 1603
+All replicas synchronized: yes

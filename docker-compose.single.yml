@@ -1,0 +1,53 @@
+services:
+
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-single-node
+    command:
+      - /app/cloudscale-node
+      - --id
+      - node1
+      - --port
+      - "8001"
+      - --data
+      - /data
+      - --peers
+      - ""
+    environment:
+      CLOUDSCALE_INTERNAL_TOKEN: ${CLOUDSCALE_INTERNAL_TOKEN}
+    ports:
+      - "8001:8001"
+    volumes:
+      - single-node-data:/data
+    networks:
+      - cloudscale-single
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudscale-single-gateway
+    command:
+      - /app/cloudscale-gateway
+      - --port
+      - "9000"
+      - --nodes
+      - http://node1:8001
+    environment:
+      CLOUDSCALE_ADMIN_KEY: ${CLOUDSCALE_ADMIN_KEY}
+      CLOUDSCALE_READER_KEY: ${CLOUDSCALE_READER_KEY}
+    ports:
+      - "9000:9000"
+    depends_on:
+      - node1
+    networks:
+      - cloudscale-single
+
+networks:
+  cloudscale-single:
+    driver: bridge
+
+volumes:
+  single-node-data:
