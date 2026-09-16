@@ -210,7 +210,9 @@ For a three-node cluster:
                +---------+
                | Leader  |
                +---------+
-                /                      /                       v           v
+                /       \
+               /         \
+              v           v
        +---------+   +---------+
        | Node 2  |   | Node 3  |
        |Follower |   |Follower |
