@@ -52,7 +52,11 @@ Higher write overhead
        |
        v
 Replicated state + fault tolerance
-Architecture
+```
+
+## Architecture
+
+```text
                               Client
                                 |
                                 v
@@ -80,7 +84,11 @@ Architecture
                     |                       |
                     v                       v
               Persistent State       Object Storage
-Write Path
+```
+
+## Write Path
+
+```text
 Client
   |
   v
@@ -103,7 +111,11 @@ Apply to storage
   |
   v
 Response
-Failure Path
+```
+
+## Failure Path
+
+```text
 Leader Failure
       |
       v
@@ -126,24 +138,27 @@ Replica synchronization
       |
       v
 Cluster convergence
-Core Components
-ComponentResponsibility
-Storage EngineObject persistence and retrieval
-Distributed NodesIndependent storage processes
-ReplicationReplicated state across nodes
-RaftConsensus and replicated log
-Failure DetectionHeartbeats and failure detection
-Fault ToleranceLeader failover and recovery
-API GatewayExternal request routing
-AuthenticationProtected API access
-SchedulerAI-oriented workload scheduling
-Dockerfile Local containerized deployment
-KubernetesCluster orchestration
-PrometheusMetrics collection
-GrafanaMonitoring dashboards
-AWS / EKSCloud deployment experiments
-BenchmarkingPerformance measurement
-Research AnalysisExperimental interpretation
+```
+
+## Core Components
+| Component | Responsibility |
+|---|---|
+| Storage Engine | Object persistence and retrieval |
+| Distributed Nodes | Independent storage processes |
+| Replication | Replicated state across nodes |
+| Raft | Consensus and replicated log |
+| Failure Detection | Heartbeats and failure detection |
+| Fault Tolerance | Leader failover and recovery |
+| API Gateway | External request routing |
+| Authentication | Protected API access |
+| Scheduler | AI-oriented workload scheduling |
+| Docker | Local containerized deployment |
+| Kubernetes | Cluster orchestration |
+| Prometheus | Metrics collection |
+| Grafana | Monitoring dashboards |
+| AWS / EKS | Cloud deployment experiments |
+| Benchmarking | Performance measurement |
+| Research Analysis | Experimental interpretation |
 ## Raft Consensus
 
 CloudScale uses Raft to coordinate replicated cluster state.
